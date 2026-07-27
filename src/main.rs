@@ -1,57 +1,74 @@
-mod caster;
-mod controls;
-mod draw_cell;
-mod framebuffer;
-mod load_maze;
-mod player;
+//! Un raycaster de columnas inspirado en la técnica de Wolfenstein 3D.
 
-use crate::caster::cast_ray;
-use crate::controls::process_events;
-use crate::draw_cell::{render_maze, draw_cell};
-use crate::framebuffer::Framebuffer;
-use crate::load_maze::{load_maze, Maze};
-use crate::player::Player;
+mod controls;
+mod framebuffer;
+mod map;
+mod player;
+mod raycaster;
+mod renderer;
+
+use std::process;
 
 use raylib::prelude::*;
 
-const SCREEN_WIDTH: i32 = 800;
-const SCREEN_HEIGHT: i32 = 600;
+use crate::{
+    controls::update_player,
+    framebuffer::Framebuffer,
+    map::Map,
+    player::Player,
+    renderer::{render_minimap, render_world},
+};
+
+const SCREEN_WIDTH: i32 = 960;
+const SCREEN_HEIGHT: i32 = 640;
+const MAP_PATH: &str = "src/map/map.txt";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewMode {
+    ThreeDimensional,
+    Map,
+}
 
 fn main() {
-    let (mut window, thread) = RaylibBuilder::new()
+    let map = Map::load(MAP_PATH).unwrap_or_else(|error| {
+        eprintln!("No se pudo cargar {MAP_PATH}: {error}");
+        process::exit(1);
+    });
+    let mut player = Player::new(map.player_spawn());
+
+    let (mut window, raylib_thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
-        .title("2D Maze")
+        .title("Wolfenstein-style raycaster — M: mapa, ESC: salir")
         .build();
+    window.set_target_fps(60);
 
     let mut framebuffer = Framebuffer::new(SCREEN_WIDTH, SCREEN_HEIGHT);
-    let maze = load_maze("src/map/map.txt");
-
-    let player = Player {
-        pos: Vector2::new(100.0, 100.0),
-        a: 0.0, // looking right
-        fov: 60.0 * PI / 180.0, // 60 degrees
-    };
+    // La textura se crea una vez y después sólo se actualizan sus píxeles.
+    let initial_image = Image::gen_image_color(SCREEN_WIDTH, SCREEN_HEIGHT, Color::BLACK);
+    let mut screen_texture = window
+        .load_texture_from_image(&raylib_thread, &initial_image)
+        .expect("Raylib no pudo crear la textura de pantalla");
+    let mut mode = ViewMode::ThreeDimensional;
 
     while !window.window_should_close() {
-        // 1. clear the framebuffer
-        framebuffer.clear();
+        let delta_seconds = window.get_frame_time().min(0.05);
+        update_player(&mut player, &map, &window, delta_seconds);
 
-        // 2. move the player on user input
-        process_events(&mut player, &window);
-
-        let mut mode = "2D";
-
-        if window.is_key_down(KeyboardKey::KEY_M) {
-            mode = if mode == "2D" { "3D" } else { "2D" };
+        if window.is_key_pressed(KeyboardKey::KEY_M) {
+            mode = match mode {
+                ViewMode::ThreeDimensional => ViewMode::Map,
+                ViewMode::Map => ViewMode::ThreeDimensional,
+            };
         }
 
-        // Clear the framebuffer
         framebuffer.clear();
-        // 3. draw stuff
-        if mode == "2D" {
-            render_maze(&mut framebuffer, &maze, block_size, &player);
-        } else {
-            render_world(&mut framebuffer, &player);
+        match mode {
+            ViewMode::ThreeDimensional => {
+                render_world(&mut framebuffer, &map, &player);
+                render_minimap(&mut framebuffer, &map, &player, true);
+            }
+            ViewMode::Map => render_minimap(&mut framebuffer, &map, &player, false),
         }
+        framebuffer.present(&mut window, &raylib_thread, &mut screen_texture);
     }
 }

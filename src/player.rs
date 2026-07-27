@@ -1,18 +1,29 @@
-// player.rs
+//! Estado de la cámara/jugador.
 
-use raylib::prelude::*;
 use std::f32::consts::PI;
 
+use raylib::prelude::Vector2;
+
+/// Cámara de primera persona en el plano del mapa.
+#[derive(Debug, Clone, Copy)]
 pub struct Player {
-    pub pos: Vector2,
-    pub a: f32, // angle of view
+    pub position: Vector2,
+    /// Dirección de visión en radianes. Cero apunta a la derecha.
+    pub angle: f32,
+    /// Apertura horizontal de la cámara en radianes.
     pub fov: f32,
 }
 
-// draw what the player sees
-let num_rays = 5;
-for i in 0..num_rays {
-    let current_ray = i as f32 / num_rays as f32; // current ray divided by total rays
-    let a = player.a - (player.fov / 2.0) + (player.fov * current_ray);
-    cast_ray(framebuffer, &maze, &player, a, block_size);
+impl Player {
+    pub fn new(position: Vector2) -> Self {
+        Self {
+            position,
+            angle: 0.0,
+            fov: PI / 3.0,
+        }
+    }
+
+    pub fn forward(&self) -> Vector2 {
+        Vector2::new(self.angle.cos(), self.angle.sin())
+    }
 }

@@ -1,81 +1,66 @@
+//! Buffer de píxeles de CPU y puente de presentación hacia Raylib.
+
 use raylib::prelude::*;
 
 pub struct Framebuffer {
     width: i32,
     height: i32,
-    background_color: Color,
-    current_color: Color,
-    image: Image,
+    /// RGBA8 contiguo: formato que `Texture2D::update_texture` espera.
+    pixels: Vec<u8>,
 }
 
 impl Framebuffer {
     pub fn new(width: i32, height: i32) -> Self {
-        let background_color = Color::BLACK;
-        let current_color = Color::WHITE;
-        let image = Image::gen_image_color(width, height, background_color);
-        Framebuffer {
+        Self {
             width,
             height,
-            background_color,
-            current_color,
-            image,
+            pixels: vec![0; (width * height * 4) as usize],
         }
-    }
-
-    pub fn set_background_color(&mut self, color: Color) {
-        self.background_color = color;
     }
 
     pub fn width(&self) -> i32 {
         self.width
     }
-
     pub fn height(&self) -> i32 {
         self.height
     }
 
     pub fn clear(&mut self) {
-        self.image = Image::gen_image_color(self.width, self.height, self.background_color);
+        self.pixels.fill(0);
     }
 
-    pub fn set_current_color(&mut self, color: Color) {
-        self.current_color = color;
-    }
-
-    pub fn point(&mut self, x: i32, y: i32) {
-        if x >= 0 && x < self.width && y >= 0 && y < self.height {
-            self.image.draw_pixel(x, y, self.current_color);
+    pub fn pixel(&mut self, x: i32, y: i32, color: Color) {
+        if x >= 0 && y >= 0 && x < self.width && y < self.height {
+            let offset = ((y * self.width + x) * 4) as usize;
+            self.pixels[offset..offset + 4].copy_from_slice(&[color.r, color.g, color.b, color.a]);
         }
     }
 
-    /// Devuelve el color de una celda. Las coordenadas fuera del framebuffer
-    /// se consideran fondo, lo que hace que los bordes del mundo sean finitos.
-    pub fn get_color(&mut self, x: i32, y: i32) -> Color {
-        if x >= 0 && x < self.width && y >= 0 && y < self.height {
-            self.image.get_color(x, y)
-        } else {
-            self.background_color
+    pub fn vertical_line(&mut self, x: i32, from: i32, to: i32, color: Color) {
+        for y in from.max(0)..to.min(self.height) {
+            self.pixel(x, y, color);
         }
     }
 
-    pub fn render_to_file(&self, filename: &str) {
-        self.image.export_image(filename);
+    pub fn rectangle(&mut self, x: i32, y: i32, width: i32, height: i32, color: Color) {
+        for py in y.max(0)..(y + height).min(self.height) {
+            for px in x.max(0)..(x + width).min(self.width) {
+                self.pixel(px, py, color);
+            }
+        }
     }
 
-    pub fn swap_buffers(&self, window: &mut RaylibHandle, raylib_thread: &RaylibThread) {
-        if let Ok(texture) = window.load_texture_from_image(raylib_thread, &self.image) {
-            let mut renderer = window.begin_drawing(raylib_thread);
-            let screen_width = renderer.get_screen_width() as f32;
-            let screen_height = renderer.get_screen_height() as f32;
-            renderer.clear_background(Color::BLACK);
-            renderer.draw_texture_pro(
-                &texture,
-                Rectangle::new(0.0, 0.0, self.width as f32, self.height as f32),
-                Rectangle::new(0.0, 0.0, screen_width, screen_height),
-                Vector2::zero(),
-                0.0,
-                Color::WHITE,
-            );
-        }
+    pub fn present(
+        &self,
+        window: &mut RaylibHandle,
+        thread: &RaylibThread,
+        texture: &mut Texture2D,
+    ) {
+        texture
+            .update_texture(&self.pixels)
+            .expect("el tamaño del framebuffer y de la textura debe coincidir");
+        let mut draw = window.begin_drawing(thread);
+        draw.clear_background(Color::BLACK);
+        draw.draw_texture(texture, 0, 0, Color::WHITE);
     }
 }
