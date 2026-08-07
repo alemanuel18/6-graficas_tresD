@@ -42,9 +42,11 @@ fn main() {
         .expect("No se pudo crear la textura de pantalla");
     let wall_texture =
         Bitmap::load("Assets/escenario/MS-DOS - Wolfenstein 3D - Miscellaneous - Walls.png");
-    let enemy_sprite = Bitmap::load("Assets/Enemis/MS-DOS - Wolfenstein 3D - Enemies - SS.png");
-    let boss_sprite =
-        Bitmap::load("Assets/Enemis/MS-DOS - Wolfenstein 3D - Bosses - General Fettgesicht.png");
+    let enemy_sprite =
+        Bitmap::load_sprite("Assets/Enemis/MS-DOS - Wolfenstein 3D - Enemies - SS.png");
+    let boss_sprite = Bitmap::load_sprite(
+        "Assets/Enemis/MS-DOS - Wolfenstein 3D - Bosses - General Fettgesicht.png",
+    );
     let audio = raylib::audio::RaylibAudio::init_audio_device().ok();
     let pistol_sound = audio
         .as_ref()
@@ -151,7 +153,12 @@ fn main() {
             Screen::Playing => {
                 if let Some(game) = &level {
                     draw_hud(&mut draw, game);
-                    draw_crosshair(&mut draw, game.has_aim_target());
+                    draw_crosshair(
+                        &mut draw,
+                        game.weapon,
+                        game.shot_timer > 0.0,
+                        game.has_aim_target(),
+                    );
                     if game.muzzle_timer > 0.0 {
                         draw.draw_rectangle(
                             SCREEN_WIDTH / 2 - 3,
@@ -264,11 +271,24 @@ fn draw_end(draw: &mut RaylibDrawHandle, victory: bool) {
     draw.draw_text("M / BACKSPACE: volver al menu", 305, 365, 24, Color::WHITE);
 }
 
-fn draw_crosshair(draw: &mut RaylibDrawHandle, target: bool) {
+fn draw_crosshair(
+    draw: &mut RaylibDrawHandle,
+    weapon: game::Weapon,
+    reloading: bool,
+    target: bool,
+) {
     let center = Vector2::new((SCREEN_WIDTH / 2) as f32, (SCREEN_HEIGHT / 2) as f32);
-    let color = if target { Color::RED } else { Color::WHITE };
-    let gap = 7.0;
-    let length = 13.0;
+    let color = if reloading {
+        Color::RED
+    } else if target {
+        Color::new(255, 150, 80, 255)
+    } else {
+        Color::WHITE
+    };
+    let (gap, length) = match weapon {
+        game::Weapon::Pistol => (6.0, 10.0),
+        game::Weapon::Shotgun => (11.0, 18.0),
+    };
     draw.draw_line_v(
         Vector2::new(center.x - gap - length, center.y),
         Vector2::new(center.x - gap, center.y),

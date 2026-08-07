@@ -20,7 +20,8 @@ cargo run
 - `Enter`: iniciar o repetir nivel. `M`/`Backspace`: volver al menú desde
   victoria/derrota. `Esc`: cerrar el juego.
 - La mirilla se dibuja en el centro; cambia a rojo cuando apunta a un enemigo
-  visible y dentro del alcance del rayo.
+  visible y dentro del alcance del rayo. Su apertura cambia según el arma y se
+  vuelve roja mientras el arma está recargando.
 
 ## Diseño
 
@@ -46,6 +47,9 @@ main ──> game ──> controls ──> player + map
   atlas de paredes por cuadros de 65 px, selecciona la textura según el tipo
   de muro y orientación, proyecta sprites animados y dibuja el minimapa. El
   atlas SS se interpreta como 8 columnas por 7 filas y el del jefe como 4 por 3.
+  Los dos colores grises del fondo de los sprites se convierten en alfa al
+  cargar el atlas. Un z-buffer por columna evita que un enemigo atraviese una
+  pared durante el render.
 - `framebuffer.rs`: es un búfer RGBA8 de CPU. Se actualiza una textura de GPU
   persistente por fotograma; no se crean imágenes ni texturas dentro del bucle.
 
@@ -67,6 +71,8 @@ Los símbolos `e` y `b` de los mapas son enemigos y jefe. Se consideran celdas
 transitables para DDA y colisión, mientras el resto de símbolos continúa siendo
 una pared. Los WAV disponibles se cargan al arrancar y se reproducen al usar
 cada arma y al completar el nivel.
+Los disparos del jugador y los ataques enemigos también consultan el primer
+impacto del DDA; una pared bloquea ambos.
 
 ## Verificación
 

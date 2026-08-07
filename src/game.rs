@@ -122,8 +122,12 @@ impl Level {
                 continue;
             }
             enemy.hurt_timer = (enemy.hurt_timer - delta).max(0.0);
-            let distance = enemy.position.distance_to(self.player.position);
-            if distance < 190.0 {
+            let to_player = self.player.position - enemy.position;
+            let distance = to_player.length();
+            let attack_angle = to_player.y.atan2(to_player.x);
+            let has_line_of_sight = cast_ray(&self.map, enemy.position, attack_angle).distance
+                >= distance - TILE_SIZE * 0.5;
+            if distance < 190.0 && has_line_of_sight {
                 enemy.attack_timer -= delta;
                 if enemy.attack_timer <= 0.0 {
                     self.health -= if enemy.boss { 18 } else { 8 };
@@ -145,6 +149,7 @@ impl Level {
         self.muzzle_timer = 0.12;
         self.fired_this_frame = true;
         let forward = self.player.forward();
+        let wall_distance = cast_ray(&self.map, self.player.position, self.player.angle).distance;
         let mut target: Option<(usize, f32)> = None;
         for (index, enemy) in self.enemies.iter().enumerate() {
             if enemy.hp <= 0 {
@@ -154,7 +159,10 @@ impl Level {
             let distance = delta.length();
             let direction = delta / distance.max(0.001);
             let alignment = forward.dot(direction);
-            if alignment > 0.94 && target.is_none_or(|(_, old)| distance < old) {
+            if alignment > 0.94
+                && distance <= wall_distance + TILE_SIZE * 0.25
+                && target.is_none_or(|(_, old)| distance < old)
+            {
                 target = Some((index, distance));
             }
         }

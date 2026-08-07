@@ -31,6 +31,23 @@ impl Bitmap {
             pixels,
         })
     }
+
+    pub fn load_sprite(path: &str) -> Option<Self> {
+        let mut bitmap = Self::load(path)?;
+        for pixel in &mut bitmap.pixels {
+            // El atlas usa estos dos grises como fondo y como líneas de guía.
+            let is_atlas_background = (pixel.r as i16 - 99).abs() <= 3
+                && (pixel.g as i16 - 116).abs() <= 3
+                && (pixel.b as i16 - 125).abs() <= 3
+                || (pixel.r as i16 - 125).abs() <= 3
+                    && (pixel.g as i16 - 146).abs() <= 3
+                    && (pixel.b as i16 - 158).abs() <= 3;
+            if is_atlas_background {
+                pixel.a = 0;
+            }
+        }
+        Some(bitmap)
+    }
     /// Muestra una región concreta de un atlas, sin dibujar las demás poses.
     fn sample_region(&self, x: i32, y: i32, width: i32, height: i32, u: f32, v: f32) -> Color {
         let px = (x as f32 + u.clamp(0.0, 0.999) * width as f32)
@@ -85,11 +102,13 @@ pub fn render_world(
     framebuffer.rectangle(0, horizon, width, height - horizon, FLOOR);
 
     let projection_plane = width as f32 / (2.0 * (player.fov / 2.0).tan());
+    let mut wall_depth = vec![f32::INFINITY; width as usize];
     for column in 0..width {
         let normalized_x = (column as f32 + 0.5) / width as f32;
         let ray_angle = player.angle - player.fov / 2.0 + normalized_x * player.fov;
         let hit = cast_ray(map, player.position, ray_angle);
         let perpendicular_distance = (hit.distance * (ray_angle - player.angle).cos()).max(0.001);
+        wall_depth[column as usize] = perpendicular_distance;
         let wall_height = (TILE_SIZE / perpendicular_distance * projection_plane) as i32;
         let top = horizon - wall_height / 2;
         let bottom = horizon + wall_height / 2;
@@ -124,6 +143,7 @@ pub fn render_world(
         assets.boss_sprite,
         enemies,
         assets.animation_time,
+        &wall_depth,
     );
 }
 
@@ -134,11 +154,18 @@ fn render_sprites(
     boss_sprite: Option<&Bitmap>,
     enemies: &[Enemy],
     animation_time: f32,
+    wall_depth: &[f32],
 ) {
     let width = framebuffer.width();
     let height = framebuffer.height();
     let plane = width as f32 / (2.0 * (player.fov / 2.0).tan());
-    for enemy in enemies {
+    let mut sorted_enemies: Vec<&Enemy> = enemies.iter().filter(|enemy| enemy.hp > 0).collect();
+    sorted_enemies.sort_by(|a, b| {
+        let a_distance = a.position.distance_to(player.position);
+        let b_distance = b.position.distance_to(player.position);
+        b_distance.total_cmp(&a_distance)
+    });
+    for enemy in sorted_enemies {
         if enemy.hp <= 0 {
             continue;
         }
@@ -191,7 +218,13 @@ fn render_sprites(
                     },
                 );
                 if color.a > 20 {
-                    framebuffer.pixel(left + x, top + y, color);
+                    let screen_x = left + x;
+                    if screen_x >= 0
+                        && screen_x < width
+                        && corrected < wall_depth[screen_x as usize]
+                    {
+                        framebuffer.pixel(screen_x, top + y, color);
+                    }
                 }
             }
         }
