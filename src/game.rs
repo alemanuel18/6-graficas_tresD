@@ -66,6 +66,7 @@ pub struct Level {
     pub muzzle_timer: f32,
     pub animation_time: f32,
     pub fired_this_frame: bool,
+    pub player_hurt_timer: f32,
 }
 
 impl Level {
@@ -96,6 +97,7 @@ impl Level {
             muzzle_timer: 0.0,
             animation_time: 0.0,
             fired_this_frame: false,
+            player_hurt_timer: 0.0,
         })
     }
 
@@ -103,6 +105,7 @@ impl Level {
         update_player(&mut self.player, &self.map, window, delta);
         self.animation_time += delta;
         self.fired_this_frame = false;
+        self.player_hurt_timer = (self.player_hurt_timer - delta).max(0.0);
         self.shot_timer = (self.shot_timer - delta).max(0.0);
         self.muzzle_timer = (self.muzzle_timer - delta).max(0.0);
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
@@ -131,6 +134,7 @@ impl Level {
                 enemy.attack_timer -= delta;
                 if enemy.attack_timer <= 0.0 {
                     self.health -= if enemy.boss { 18 } else { 8 };
+                    self.player_hurt_timer = 0.24;
                     enemy.attack_timer = if enemy.boss { 0.8 } else { 1.5 };
                 }
             }

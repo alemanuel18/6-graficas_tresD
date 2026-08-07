@@ -22,6 +22,9 @@ cargo run
 - La mirilla se dibuja en el centro; cambia a rojo cuando apunta a un enemigo
   visible y dentro del alcance del rayo. Su apertura cambia según el arma y se
   vuelve roja mientras el arma está recargando.
+- La interfaz inferior muestra una barra de salud que cambia de verde a amarillo
+  y rojo. Al recibir daño, la pantalla parpadea en rojo; los enemigos parpadean
+  en rojo al ser impactados.
 
 ## Diseño
 

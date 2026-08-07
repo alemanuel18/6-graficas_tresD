@@ -217,6 +217,12 @@ fn render_sprites(
                         )
                     },
                 );
+                let color =
+                    if enemy.hurt_timer > 0.0 && (animation_time * 24.0).floor() as i32 % 2 == 0 {
+                        Color::new(255, 70, 70, color.a)
+                    } else {
+                        color
+                    };
                 if color.a > 20 {
                     let screen_x = left + x;
                     if screen_x >= 0

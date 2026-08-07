@@ -168,6 +168,20 @@ fn main() {
                             Color::YELLOW,
                         );
                     }
+                    if game.player_hurt_timer > 0.0 {
+                        let alpha = if (game.animation_time * 24.0).floor() as i32 % 2 == 0 {
+                            160
+                        } else {
+                            45
+                        };
+                        draw.draw_rectangle(
+                            0,
+                            0,
+                            SCREEN_WIDTH,
+                            SCREEN_HEIGHT,
+                            Color::new(220, 0, 0, alpha),
+                        );
+                    }
                 }
             }
             Screen::Victory => draw_end(&mut draw, true),
@@ -230,16 +244,42 @@ fn draw_hud(draw: &mut RaylibDrawHandle, game: &Level) {
         58,
         Color::new(12, 12, 15, 230),
     );
+    draw.draw_text("SALUD", 24, SCREEN_HEIGHT - 42, 18, Color::WHITE);
+    let bar_x = 100;
+    let bar_y = SCREEN_HEIGHT - 43;
+    let bar_width = 220;
+    let bar_height = 22;
+    let health_ratio = (game.health.max(0) as f32 / 100.0).clamp(0.0, 1.0);
+    let health_color = if health_ratio > 0.6 {
+        Color::new(50, 210, 90, 255)
+    } else if health_ratio > 0.3 {
+        Color::new(240, 190, 45, 255)
+    } else {
+        Color::new(220, 45, 45, 255)
+    };
+    draw.draw_rectangle(
+        bar_x,
+        bar_y,
+        bar_width,
+        bar_height,
+        Color::new(55, 55, 60, 255),
+    );
+    draw.draw_rectangle(
+        bar_x + 3,
+        bar_y + 3,
+        ((bar_width - 6) as f32 * health_ratio) as i32,
+        bar_height - 6,
+        health_color,
+    );
     draw.draw_text(
         &format!(
-            "VIDA {:03}    ARMA: {}    ENEMIGOS: {}",
-            game.health.max(0),
+            "ARMA: {}    ENEMIGOS: {}",
             game.weapon.name(),
             game.alive_enemies()
         ),
-        24,
+        355,
         SCREEN_HEIGHT - 40,
-        22,
+        20,
         Color::WHITE,
     );
     draw.draw_text(
