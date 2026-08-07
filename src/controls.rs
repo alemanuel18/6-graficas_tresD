@@ -5,15 +5,17 @@ use raylib::prelude::*;
 use crate::{map::Map, player::Player};
 
 const MOVE_SPEED: f32 = 105.0;
-const TURN_SPEED: f32 = 2.4;
+const TURN_SPEED: f32 = 0.0035;
 const PLAYER_RADIUS: f32 = 7.0;
 
 /// Actualiza orientación y posición. Cada componente se prueba por separado
 /// para que el jugador se deslice junto a una pared en vez de quedar bloqueado.
 pub fn update_player(player: &mut Player, map: &Map, window: &RaylibHandle, delta: f32) {
-    let turn = (window.is_key_down(KeyboardKey::KEY_RIGHT) as i32
+    let keyboard_turn = (window.is_key_down(KeyboardKey::KEY_RIGHT) as i32
         - window.is_key_down(KeyboardKey::KEY_LEFT) as i32) as f32;
-    player.angle = (player.angle + turn * TURN_SPEED * delta).rem_euclid(std::f32::consts::TAU);
+    player.angle =
+        (player.angle + keyboard_turn * 2.4 * delta + window.get_mouse_delta().x * TURN_SPEED)
+            .rem_euclid(std::f32::consts::TAU);
 
     let forward = player.forward();
     let right = Vector2::new(-forward.y, forward.x);
@@ -21,8 +23,10 @@ pub fn update_player(player: &mut Player, map: &Map, window: &RaylibHandle, delt
         + window.is_key_down(KeyboardKey::KEY_UP) as i32
         - window.is_key_down(KeyboardKey::KEY_S) as i32
         - window.is_key_down(KeyboardKey::KEY_DOWN) as i32) as f32;
+    let forward_input = forward_input.clamp(-1.0, 1.0);
     let strafe_input = (window.is_key_down(KeyboardKey::KEY_D) as i32
         - window.is_key_down(KeyboardKey::KEY_A) as i32) as f32;
+    let strafe_input = strafe_input.clamp(-1.0, 1.0);
 
     let displacement = Vector2::new(
         (forward.x * forward_input + right.x * strafe_input) * MOVE_SPEED * delta,

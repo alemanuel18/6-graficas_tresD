@@ -4,6 +4,7 @@ use raylib::prelude::*;
 
 use crate::{
     framebuffer::Framebuffer,
+    game::Enemy,
     map::{Map, TILE_SIZE},
     player::Player,
     raycaster::{HitSide, RayHit, cast_ray},
@@ -13,9 +14,70 @@ const CEILING: Color = Color::new(27, 36, 54, 255);
 const FLOOR: Color = Color::new(43, 37, 32, 255);
 const MINIMAP_SCALE: f32 = 0.38;
 
+/// Imagen decodificada una sola vez para poder muestrearla desde el framebuffer.
+pub struct Bitmap {
+    pub width: i32,
+    pub height: i32,
+    pub pixels: Vec<Color>,
+}
+
+impl Bitmap {
+    pub fn load(path: &str) -> Option<Self> {
+        let image = Image::load_image(path).ok()?;
+        let pixels = image.get_image_data().as_ref().to_vec();
+        Some(Self {
+            width: image.width(),
+            height: image.height(),
+            pixels,
+        })
+    }
+    /// Muestra una región concreta de un atlas, sin dibujar las demás poses.
+    fn sample_region(&self, x: i32, y: i32, width: i32, height: i32, u: f32, v: f32) -> Color {
+        let px = (x as f32 + u.clamp(0.0, 0.999) * width as f32)
+            .clamp(0.0, self.width.saturating_sub(1) as f32) as usize;
+        let py = (y as f32 + v.clamp(0.0, 0.999) * height as f32)
+            .clamp(0.0, self.height.saturating_sub(1) as f32) as usize;
+        self.pixels[py * self.width as usize + px]
+    }
+
+    fn sample_frame(
+        &self,
+        column: i32,
+        row: i32,
+        columns: i32,
+        rows: i32,
+        u: f32,
+        v: f32,
+    ) -> Color {
+        let frame_width = self.width / columns;
+        let frame_height = self.height / rows;
+        self.sample_region(
+            column * frame_width,
+            row * frame_height,
+            frame_width,
+            frame_height,
+            u,
+            v,
+        )
+    }
+}
+
+pub struct RenderAssets<'a> {
+    pub wall_texture: Option<&'a Bitmap>,
+    pub enemy_sprite: Option<&'a Bitmap>,
+    pub boss_sprite: Option<&'a Bitmap>,
+    pub animation_time: f32,
+}
+
 /// Genera una columna por cada píxel horizontal: cielo, muro y suelo.
 /// La distancia se corrige con coseno para eliminar el ojo de pez.
-pub fn render_world(framebuffer: &mut Framebuffer, map: &Map, player: &Player) {
+pub fn render_world(
+    framebuffer: &mut Framebuffer,
+    map: &Map,
+    player: &Player,
+    assets: &RenderAssets<'_>,
+    enemies: &[Enemy],
+) {
     let width = framebuffer.width();
     let height = framebuffer.height();
     let horizon = height / 2;
@@ -31,7 +93,108 @@ pub fn render_world(framebuffer: &mut Framebuffer, map: &Map, player: &Player) {
         let wall_height = (TILE_SIZE / perpendicular_distance * projection_plane) as i32;
         let top = horizon - wall_height / 2;
         let bottom = horizon + wall_height / 2;
-        framebuffer.vertical_line(column, top, bottom, wall_color(hit));
+        for y in top.max(0)..bottom.min(height) {
+            let wall_x = if hit.side == HitSide::Vertical {
+                hit.position.y / TILE_SIZE
+            } else {
+                hit.position.x / TILE_SIZE
+            };
+            let v = (y - top) as f32 / wall_height.max(1) as f32;
+            let color = assets.wall_texture.map_or_else(
+                || wall_color(hit),
+                |texture| {
+                    // El atlas de paredes está compuesto por cuadros de 65 px.
+                    let tile = match hit.wall {
+                        '+' => 0,
+                        '-' => 1,
+                        '|' => 2,
+                        _ => 3,
+                    };
+                    let row = if hit.side == HitSide::Vertical { 0 } else { 1 };
+                    texture.sample_region(tile * 65, 18 + row * 65, 64, 64, wall_x, v)
+                },
+            );
+            framebuffer.pixel(column, y, color);
+        }
+    }
+    render_sprites(
+        framebuffer,
+        player,
+        assets.enemy_sprite,
+        assets.boss_sprite,
+        enemies,
+        assets.animation_time,
+    );
+}
+
+fn render_sprites(
+    framebuffer: &mut Framebuffer,
+    player: &Player,
+    sprite: Option<&Bitmap>,
+    boss_sprite: Option<&Bitmap>,
+    enemies: &[Enemy],
+    animation_time: f32,
+) {
+    let width = framebuffer.width();
+    let height = framebuffer.height();
+    let plane = width as f32 / (2.0 * (player.fov / 2.0).tan());
+    for enemy in enemies {
+        if enemy.hp <= 0 {
+            continue;
+        }
+        let delta = enemy.position - player.position;
+        let distance = delta.length();
+        let angle = delta.y.atan2(delta.x);
+        let relative = (angle - player.angle + std::f32::consts::PI)
+            .rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        if relative.abs() > player.fov * 0.65 || distance < 1.0 {
+            continue;
+        }
+        let corrected = distance * relative.cos();
+        let size = (TILE_SIZE / corrected * plane * if enemy.boss { 1.8 } else { 1.25 }) as i32;
+        let center_x = width / 2 + (relative.tan() * plane) as i32;
+        let left = center_x - size / 2;
+        let top = height / 2 - size / 2;
+        for y in 0..size.max(1) {
+            for x in 0..size.max(1) {
+                let image = if enemy.boss { boss_sprite } else { sprite };
+                let color = image.map_or_else(
+                    || {
+                        if enemy.boss {
+                            Color::MAROON
+                        } else {
+                            Color::RED
+                        }
+                    },
+                    |image| {
+                        // SS usa 8x7 cuadros; el jefe usa 4x3 cuadros.
+                        let (columns, rows) = if enemy.boss { (4, 3) } else { (8, 7) };
+                        let view_angle = (player.position.y - enemy.position.y)
+                            .atan2(player.position.x - enemy.position.x);
+                        let facing = (((view_angle + std::f32::consts::PI)
+                            .rem_euclid(std::f32::consts::TAU)
+                            / std::f32::consts::TAU
+                            * columns as f32)
+                            .round() as i32)
+                            .rem_euclid(columns);
+                        let pose_rows = if enemy.boss { 2 } else { 5 };
+                        let pose = (animation_time * 5.0).floor() as i32 % pose_rows;
+                        image.sample_frame(
+                            facing,
+                            pose,
+                            columns,
+                            rows,
+                            x as f32 / size as f32,
+                            y as f32 / size as f32,
+                        )
+                    },
+                );
+                if color.a > 20 {
+                    framebuffer.pixel(left + x, top + y, color);
+                }
+            }
+        }
     }
 }
 

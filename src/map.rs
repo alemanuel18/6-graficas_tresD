@@ -7,7 +7,7 @@ use raylib::prelude::Vector2;
 /// Longitud en píxeles de una celda lógica del nivel.
 pub const TILE_SIZE: f32 = 32.0;
 
-/// El mapa ASCII. Espacio, `p` y `g` son transitables; el resto son paredes.
+/// El mapa ASCII. Espacio, `p`, `g`, `e` y `b` son transitables; el resto son paredes.
 #[derive(Debug, Clone)]
 pub struct Map {
     cells: Vec<Vec<char>>,
@@ -34,9 +34,10 @@ impl Map {
                 "el mapa está vacío",
             ));
         }
-        // Un mapa rectangular elimina casos especiales al indexar durante DDA.
+        // Las filas cortas se cierran con pared: un archivo mal alineado no
+        // puede crear una salida accidental hacia el exterior del nivel.
         for row in &mut cells {
-            row.resize(width, ' ');
+            row.resize(width, '#');
         }
 
         Ok(Self { cells, width })
@@ -59,7 +60,7 @@ impl Map {
 
     pub fn is_wall_cell(&self, x: i32, y: i32) -> bool {
         self.cell(x, y)
-            .is_none_or(|cell| !matches!(cell, ' ' | 'p' | 'g'))
+            .is_none_or(|cell| !matches!(cell, ' ' | 'p' | 'g' | 'e' | 'b'))
     }
 
     /// Evita que el jugador atraviese paredes incluyendo un pequeño radio físico.
@@ -94,6 +95,19 @@ impl Map {
             }
         }
         Vector2::new(TILE_SIZE / 2.0, TILE_SIZE / 2.0)
+    }
+
+    pub fn positions_of(&self, marker: char) -> Vec<Vector2> {
+        self.cells
+            .iter()
+            .enumerate()
+            .flat_map(|(y, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(_, cell)| **cell == marker)
+                    .map(move |(x, _)| Self::cell_center(x, y))
+            })
+            .collect()
     }
 
     pub fn cell_center(x: usize, y: usize) -> Vector2 {

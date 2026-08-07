@@ -36,12 +36,6 @@ impl Framebuffer {
         }
     }
 
-    pub fn vertical_line(&mut self, x: i32, from: i32, to: i32, color: Color) {
-        for y in from.max(0)..to.min(self.height) {
-            self.pixel(x, y, color);
-        }
-    }
-
     pub fn rectangle(&mut self, x: i32, y: i32, width: i32, height: i32, color: Color) {
         for py in y.max(0)..(y + height).min(self.height) {
             for px in x.max(0)..(x + width).min(self.width) {
